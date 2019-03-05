@@ -1,0 +1,22 @@
+package com.sxt.grpc.ptoto.service;
+
+//是否运行生成多个java文件
+option java_multiple_files = false;
+//这个选项表明生成java类所在的包。如果在.proto文件中没有明确的声明java_package，就采用默认的包名
+option java_package = 'com.sxt.grpc.ptoto';
+//生成的java类名字
+option java_outer_classname = 'TestService';
+//生成方式：可以被设置为 SPEED, CODE_SIZE,or LITE_RUNTIME。这些值将通过如下的方式影响C++及java代码的生成：
+option optimize_for = SPEED;
+//（1）SPEED (default): protocol buffer编译器将通过在消息类型上执行序列化、语法分析及其他通用的操作。这种代码是最优的。
+//
+//（2）CODE_SIZE: protocol buffer编译器将会产生最少量的类，通过共享或基于反射的代码来实现序列化、语法分析及各种其它操作。采用该方式产生的代码将比SPEED要少得多， 但是操作要相对慢些。当然实现的类及其对外的API与SPEED模式都是一样的。这种方式经常用在一些包含大量的.proto文件而且并不盲目追求速度的 应用中。
+//
+//（3）LITE_RUNTIME: protocol buffer编译器依赖于运行时核心类库来生成代码（即采用libprotobuf-lite 替代libprotobuf）。这种核心类库由于忽略了一 些描述符及反射，要比全类库小得多。这种模式经常在移动手机平台应用多一些。编译器采用该模式产生的方法实现与SPEED模式不相上下，产生的类通过实现 MessageLite接口，但它仅仅是Messager接口的一个子集！
+
+service TestService {
+
+    rpc sayHello (string) returns (string);
+
+    rpc sayHello2 (string) returns (string);
+}
