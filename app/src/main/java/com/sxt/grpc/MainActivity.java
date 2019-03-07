@@ -16,105 +16,117 @@
 
 package com.sxt.grpc;
 
-import android.app.Activity;
-import android.content.Context;
+import android.graphics.Color;
+import android.graphics.Rect;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
 import android.text.TextUtils;
-import android.text.method.ScrollingMovementMethod;
+import android.util.Log;
+import android.util.TypedValue;
+import android.view.Gravity;
 import android.view.View;
-import android.view.inputmethod.InputMethodManager;
-import android.widget.Button;
 import android.widget.EditText;
+import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
+import android.widget.Toast;
 
-import java.io.PrintWriter;
-import java.io.StringWriter;
-import java.lang.ref.WeakReference;
 import java.util.concurrent.TimeUnit;
 
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
-import io.grpc.examples.helloworld.GreeterGrpc;
-import io.grpc.examples.helloworld.HelloReply;
-import io.grpc.examples.helloworld.HelloRequest;
 
 public class MainActivity extends AppCompatActivity {
-    private Button sendButton;
-    private EditText hostEdit;
-    private EditText portEdit;
-    private EditText messageEdit;
-    private TextView resultText;
+
+    private ScrollView scrollView;
+    private LinearLayout responseContainer;
+    private EditText editText;
+    private MessageTask task;
+    private final String TAG = this.getClass().getName();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
-        sendButton = (Button) findViewById(R.id.send_button);
-        hostEdit = (EditText) findViewById(R.id.host_edit_text);
-        portEdit = (EditText) findViewById(R.id.port_edit_text);
-        messageEdit = (EditText) findViewById(R.id.message_edit_text);
-        resultText = (TextView) findViewById(R.id.grpc_response_text);
-        resultText.setMovementMethod(new ScrollingMovementMethod());
+        setContentView(R.layout.activity_main2);
+        editText = findViewById(R.id.edit_text);
+        scrollView = findViewById(R.id.scrollView);
+        responseContainer = findViewById(R.id.response_layout);
     }
 
     public void sendMessage(View view) {
-        ((InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE))
-                .hideSoftInputFromWindow(hostEdit.getWindowToken(), 0);
-        sendButton.setEnabled(false);
-        resultText.setText("");
-        new GrpcTask(this)
-                .execute(
-                        hostEdit.getText().toString(),
-                        messageEdit.getText().toString(),
-                        portEdit.getText().toString());
+        String message = editText.getText().toString().trim();
+        if (TextUtils.isEmpty(message)) {
+            Toast.makeText(this, "消息内容不能为空", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (task != null) {
+            task.cancel(true);
+        }
+        task = new MessageTask();
+        task.execute("192.168.10.25", "8080", message);
     }
 
-    private static class GrpcTask extends AsyncTask<String, Void, String> {
-        private final WeakReference<Activity> activityReference;
+    public class MessageTask extends AsyncTask<String, Void, String> {
+
         private ManagedChannel channel;
 
-        private GrpcTask(Activity activity) {
-            this.activityReference = new WeakReference<Activity>(activity);
-        }
-
         @Override
-        protected String doInBackground(String... params) {
-            String host = params[0];
-            String message = params[1];
-            String portStr = params[2];
-            int port = TextUtils.isEmpty(portStr) ? 0 : Integer.valueOf(portStr);
+        protected String doInBackground(String... strings) {
+            String host = strings[0];
+            String portStr = strings[1];
+            String message = strings[2];
+            StringBuilder sb = new StringBuilder();
             try {
+                int port = Integer.parseInt(portStr);
                 channel = ManagedChannelBuilder.forAddress(host, port).usePlaintext(true).build();
-                GreeterGrpc.GreeterBlockingStub stub = GreeterGrpc.newBlockingStub(channel);
-                HelloRequest request = HelloRequest.newBuilder().setName(message).build();
-                HelloReply reply = stub.sayHello(request);
-                return reply.getMessage();
+                TestServiceGrpc.TestServiceBlockingStub stub = TestServiceGrpc.newBlockingStub(channel);
+                Response response = stub.getMessage(Message.newBuilder().setContent(message).build());
+                sb.append(response.getMessage().getContent());
             } catch (Exception e) {
-                StringWriter sw = new StringWriter();
-                PrintWriter pw = new PrintWriter(sw);
-                e.printStackTrace(pw);
-                pw.flush();
-                return String.format("Failed... : %n%s", sw);
+                e.printStackTrace();
+                sb.append(String.format("发送失败 %s ", e.getMessage()));
             }
+            return sb.toString();
         }
 
         @Override
-        protected void onPostExecute(String result) {
-            try {
-                channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
+        protected void onPostExecute(String s) {
+            super.onPostExecute(s);
+            if (channel != null) {
+                try {
+                    channel.shutdown().awaitTermination(1, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
             }
-            Activity activity = activityReference.get();
-            if (activity == null) {
-                return;
+            TextView textView = new TextView(MainActivity.this);
+            textView.setText(s);
+            textView.setTextColor(Color.BLACK);
+            textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 15);
+            responseContainer.addView(textView);
+            LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) textView.getLayoutParams();
+            lp.gravity = Gravity.START;
+            lp.topMargin = 8;
+            lp.bottomMargin = 2;
+            textView.setLayoutParams(lp);
+
+            if (!isCover(textView)) {
+                textView.measure(0, 0);
+                scrollView.setScrollY(scrollView.getScrollY() + textView.getMeasuredHeight() * 2);
             }
-            TextView resultText = (TextView) activity.findViewById(R.id.grpc_response_text);
-            Button sendButton = (Button) activity.findViewById(R.id.send_button);
-            resultText.setText(result);
-            sendButton.setEnabled(true);
+
+            Log.e(TAG, s);
         }
+    }
+
+    public boolean isCover(View view) {
+        Rect rect = new Rect();
+        if (view.getGlobalVisibleRect(rect)) {
+            if (rect.height() >= view.getMeasuredHeight()) {
+                return true;
+            }
+        }
+        return false;
     }
 }
